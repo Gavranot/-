@@ -1,0 +1,301 @@
+#include <glad/glad.h>
+#include <GLFW/glfw3.h>
+#include <vector>
+#include <iostream>
+#include <cmath>
+
+void framebuffer_size_callback(GLFWwindow* window, int width, int height);
+void processInput(GLFWwindow *window);
+
+// settings
+const unsigned int SCR_WIDTH = 1200;
+const unsigned int SCR_HEIGHT = 900;
+
+static const char *vertexShaderSource = "#version 330 core\n"
+                                        "layout (location = 0) in vec3 aPos;\n"
+                                        "void main()\n"
+                                        "{\n"
+                                        "   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
+                                        "}\0";
+static const char *fragmentShaderSourceFirst = "#version 330 core\n"
+                                               "out vec4 FragColor;\n"
+                                               "void main()\n"
+                                               "{\n"
+                                               "   FragColor = vec4(0.0f, 0.0f, 0.0f, 1.0f);\n"
+                                               "}\n\0";
+
+static const char *fragmentShaderSourceSecond = "#version 330 core\n"
+                                                "out vec4 FragColor;\n"
+                                                "void main()\n"
+                                                "{\n"
+                                                "   FragColor = vec4(1.0f, 1.0f, 0.0f, 1.0f);\n"
+                                                "}\n\0";
+
+GLuint createAndCompileShaders(const char *vertexShaderSource, const char *fragmentShaderSource){
+    GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertexShader, 1, &vertexShaderSource, nullptr);
+    glCompileShader(vertexShader);
+
+    int success;
+    char infoLog[512];
+    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
+    if (!success)
+    {
+        glGetShaderInfoLog(vertexShader, 512, nullptr, infoLog);
+        std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
+    }
+    // fragment shader
+    GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragmentShader, 1, &fragmentShaderSource, nullptr);
+    glCompileShader(fragmentShader);
+    // check for shader compile errors
+    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
+    if (!success)
+    {
+        glGetShaderInfoLog(fragmentShader, 512, nullptr, infoLog);
+        std::cout << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << infoLog << std::endl;
+    }
+
+    GLuint shaderProgram = glCreateProgram();
+    glAttachShader(shaderProgram, vertexShader);
+    glAttachShader(shaderProgram, fragmentShader);
+    glLinkProgram(shaderProgram);
+    // check for linking errors
+    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
+    if (!success) {
+        glGetProgramInfoLog(shaderProgram, 512, nullptr, infoLog);
+        std::cout << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << infoLog << std::endl;
+    }
+    glDeleteShader(vertexShader);
+    glDeleteShader(fragmentShader);
+
+    return shaderProgram;
+}
+
+GLuint bindBuffersToArrays(std::vector<std::vector<float>> &vector, const char *vertexShaderSource, const char *fragmentShaderSource, unsigned int VBO, unsigned int VAO){
+    GLuint newShaderProgram = createAndCompileShaders(vertexShaderSource,fragmentShaderSource);
+
+    std::vector<float> vertices;
+    for(std::vector<float> point : vector){
+        for(auto coord : point){
+            vertices.push_back(coord);
+        }
+    }
+
+    int sizeOfVector = vertices.size();
+    glBindVertexArray(VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeOfVector*sizeof(float), &vertices[0], GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), nullptr);
+    glEnableVertexAttribArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBindVertexArray(VAO);
+    return newShaderProgram;
+}
+
+void returnPolygon(std::vector<std::vector<float>> &polygonVector, float rad, int numAngles, float angleToStart){
+
+    float increment = 2*3.1415f/360.0f;
+    float angle = angleToStart;
+    polygonVector.push_back({0.0f,0.0f,0.0f});
+    float xRem, yRem;
+    for(int i = 0; i<numAngles+2; i++){
+        if(i==60){
+            break;
+        }
+        float x,y,z;
+        x = rad*cos(angle);
+        y = rad*sin(angle);
+
+
+        std::vector<float> triplet = {x, y ,0.0f};
+        angle += increment;
+        polygonVector.push_back(triplet);
+    }
+
+}
+
+void createCircle(std::vector<std::vector<float>> &circleVector, float radius, int numAngles){
+
+    float angle = 0.0f;
+    float inc = 2*3.1415f/numAngles;
+    float x, y, z = 0.0f;
+    for(int i = 0; i<numAngles+1; i++){
+        x = radius*cos(angle);
+        y = radius*sin(angle);
+        angle+=inc;
+        std::vector<float> triplet = {x, y, z};
+        circleVector.push_back(triplet);
+    }
+}
+
+void rotateShape(std::vector<std::vector<float>> &newShape, std::vector<std::vector<float>> shapeVector, float angle){
+
+    float radian = 3.1415f/180*angle;
+
+    for(std::vector<float> point : shapeVector){
+        
+        float x, y;
+        std::cout<<"X: "<<point[0]<<" Y: "<<point[1]<<std::endl;
+        x= point[0]*cos(radian) - point[1]* sin(radian);
+        y= point[1]*cos(radian) + point[0]* sin(radian);
+        std::cout<<"X after: "<<x<<" Y after: "<<y<<std::endl;
+        newShape.push_back({x,y,0.0f});
+    }
+
+}
+
+int main()
+{
+    // glfw: initialize and configure
+    // ------------------------------
+    glfwInit();
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+#ifdef __APPLE__
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // uncomment this statement to fix compilation on OS X
+#endif
+
+    // glfw window creation
+    // --------------------
+    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "LearnOpenGL", nullptr, nullptr);
+    if (window == nullptr)
+    {
+        std::cout << "Failed to create GLFW window" << std::endl;
+        glfwTerminate();
+        return -1;
+    }
+    glfwMakeContextCurrent(window);
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+
+    // glad: load all OpenGL function pointers
+    // ---------------------------------------
+    if (!gladLoadGLLoader(GLADloadproc(glfwGetProcAddress)))
+    {
+        std::cout << "Failed to initialize GLAD" << std::endl;
+        return -1;
+    }
+
+
+
+    // set up vertex data (and buffer(s)) and configure vertex attributes
+    // ------------------------------------------------------------------
+    std::vector<std::vector<float>> circleVertices;
+    createCircle(circleVertices, 0.2f, 360);
+    std::vector<std::vector<float>> otherCircleVertices;
+    createCircle(otherCircleVertices, 0.3f, 360);
+
+    std::vector<std::vector<float>> segmentVertices;
+    std::vector<std::vector<float>> secondSegmentVertices;
+    std::vector<std::vector<float>> thirdSegmentVertices;
+
+    returnPolygon(segmentVertices, 0.8f, 360, 0.0f);
+    rotateShape(secondSegmentVertices, segmentVertices, -120);
+    rotateShape(thirdSegmentVertices, secondSegmentVertices, -120);
+    /*
+    returnPolygon(segmentVertices, 0.8f, 360, 0.0f);
+
+    returnPolygon(secondSegmentVertices, 0.8f, 360, 2*3.1415f/3.0f);
+
+    returnPolygon(thirdSegmentVertices, 0.8f, 360, 2*3.1415f-2*3.1415f/3.0f);
+    */
+    /*
+    returnPolygon(verticesVector, angle);
+    angle = 3.14f/3.0f;
+    returnPolygon(verticesVector, angle);
+    angle = 3.14f - 3.14f/6.0f;
+    returnPolygon(verticesVector, angle);
+    angle = 2*3.14f - 2*3.14f/3.0f;
+    returnPolygon(verticesVector, angle);
+    angle
+    */
+
+    //zglPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    unsigned int VBO_list[5], VAO_list[5];
+    glGenVertexArrays(5, VAO_list);
+    glGenBuffers(5, VBO_list);
+
+
+
+    GLuint centerCircle = bindBuffersToArrays(circleVertices, vertexShaderSource, fragmentShaderSourceFirst, VBO_list[0], VAO_list[0]);
+    GLuint otherCircle = bindBuffersToArrays(otherCircleVertices, vertexShaderSource, fragmentShaderSourceSecond, VBO_list[1], VAO_list[1]);
+
+    GLuint segment = bindBuffersToArrays(segmentVertices, vertexShaderSource, fragmentShaderSourceFirst, VBO_list[2], VAO_list[2]);
+    GLuint secondSegment = bindBuffersToArrays(secondSegmentVertices, vertexShaderSource, fragmentShaderSourceFirst, VBO_list[3], VAO_list[3]);
+    GLuint thirdSegment = bindBuffersToArrays(thirdSegmentVertices, vertexShaderSource, fragmentShaderSourceFirst, VBO_list[4], VAO_list[4]);
+
+    while (!glfwWindowShouldClose(window))
+    {
+        // input
+        // -----
+        processInput(window);
+
+        // render
+        // ------
+        glClearColor(1.0f, 1.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        // draw our first triangle
+        glUseProgram(segment);
+        glBindVertexArray(VAO_list[2]);
+        glDrawArrays(GL_TRIANGLE_FAN, 0, segmentVertices.size());
+
+        glUseProgram(secondSegment);
+        glBindVertexArray(VAO_list[3]);
+        glDrawArrays(GL_TRIANGLE_FAN, 0, secondSegmentVertices.size());
+
+        glUseProgram(thirdSegment);
+        glBindVertexArray(VAO_list[4]);
+        glDrawArrays(GL_TRIANGLE_FAN, 0, thirdSegmentVertices.size());
+
+        glUseProgram(otherCircle);
+        glBindVertexArray(VAO_list[1]);
+        glDrawArrays(GL_TRIANGLE_FAN, 0, otherCircleVertices.size());
+
+        glUseProgram(centerCircle);
+        glBindVertexArray(VAO_list[0]);
+        glDrawArrays(GL_TRIANGLE_FAN, 0, circleVertices.size());
+        /*
+        glUseProgram(segment);
+        glBindVertexArray(VAO_list[1]);
+        glDrawArrays(GL_TRIANGLE_FAN, 0, segmentVertices.size());
+        */
+
+        // glBindVertexArray(0); // no need to unbind it every time
+
+        // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
+        // -------------------------------------------------------------------------------
+        glfwSwapBuffers(window);
+        glfwPollEvents();
+    }
+
+    // optional: de-allocate all resources once they've outlived their purpose:
+    // ------------------------------------------------------------------------
+    glDeleteVertexArrays(3, VAO_list);
+    glDeleteBuffers(3, VBO_list);
+
+    // glfw: terminate, clearing all previously allocated GLFW resources.
+    // ------------------------------------------------------------------
+    glfwTerminate();
+    return 0;
+}
+
+// process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
+// ---------------------------------------------------------------------------------------------------------
+void processInput(GLFWwindow *window)
+{
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+        glfwSetWindowShouldClose(window, true);
+}
+
+// glfw: whenever the window size changed (by OS or user resize) this callback function executes
+// ---------------------------------------------------------------------------------------------
+void framebuffer_size_callback(GLFWwindow* window, int width, int height)
+{
+    // make sure the viewport matches the new window dimensions; note that width and
+    // height will be significantly larger than specified on retina displays.
+    glViewport(0, 0, width, height);
+}
+
